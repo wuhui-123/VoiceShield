@@ -70,22 +70,6 @@ def load_batch_audio(file_names, audio_dirs, sr, target_len):
 
 
 def get_feature_mask(input_attention_mask, feature_length):
-    """
-    根据原始音频的 attention_mask 生成特征级别的 mask
-    
-    Wav2Vec2 内部有卷积下采样，原始音频长度和特征帧数是线性映射关系。
-    此函数根据原始音频的有效长度，按比例计算出特征的有效帧数，
-    生成特征级别的 mask，用于忽略 padding 帧的损失计算。
-    
-    Args:
-        input_attention_mask: [batch, original_time] 原始音频的 mask
-                              1 表示有效，0 表示 padding
-        feature_length: int, Wav2Vec2 输出的特征帧数
-    
-    Returns:
-        mask: [batch, feature_length] 特征级别的 mask
-              1 表示有效帧，0 表示 padding 帧
-    """
     batch_size = input_attention_mask.shape[0]
     max_original = input_attention_mask.shape[1]
     
@@ -158,7 +142,6 @@ def train_autoencoder(
     if device.type == 'cuda':
         torch.cuda.manual_seed_all(seed)
     
-    # ============ 1. 加载数据集 ============
     print("\n" + "=" * 60)
     print("加载数据集...")
     train_dataset = ASVspoof5Dataset(split='train', use_cache=False)
@@ -173,7 +156,6 @@ def train_autoencoder(
     total_size = len(full_dataset)
     print(f"  总样本数: {total_size}")
     
-    # 可选：限制训练样本数
     if max_samples > 0 and max_samples < total_size:
         indices = torch.randperm(total_size)[:max_samples].tolist()
         full_dataset = Subset(full_dataset, indices)
@@ -193,7 +175,6 @@ def train_autoencoder(
     print(f"  DataLoader: batch_size={batch_size}, workers={num_workers}")
     print(f"  每 epoch 迭代次数: {len(loader)}")
     
-    # ============ 2. 加载模型 ============
     print("\n" + "=" * 60)
     print("加载模型...")
     print(f"  Wav2Vec2: {model_name}")
@@ -235,7 +216,6 @@ def train_autoencoder(
     # 混合精度 scaler
     scaler = torch.amp.GradScaler('cuda') if use_amp else None
     
-    # ============ 3. 训练 ============
     target_len = int(sr * audio_length)
     best_loss = float('inf')
     patience_counter = 0
@@ -271,7 +251,6 @@ def train_autoencoder(
                 target_len=target_len
             )
             
-            # ---------- Wav2Vec2 批量处理 ----------
             inputs = wav2vec2_processor(
                 waveforms,
                 sampling_rate=sr,
@@ -280,7 +259,6 @@ def train_autoencoder(
                 return_attention_mask=True
             ).to(device)
             
-            # ---------- 前向传播 ----------
             if use_amp:
                 with torch.amp.autocast('cuda'):
                     with torch.no_grad():
